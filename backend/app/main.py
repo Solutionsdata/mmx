@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 from app.database import engine, Base, SessionLocal
 from app.config import settings
 from app.routers import auth, admin, products, inventory, forecast, orders, kpis, imports
@@ -14,19 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 def _init_db_sync():
-    """Run DB setup synchronously. Called in a background thread at startup."""
     with engine.connect() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS mmx"))
         conn.commit()
-    Base.metadata.create_all(bind=engine)
+    # checkfirst=True: skip tables that already exist
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE mmx.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
         conn.execute(text("ALTER TABLE mmx.users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
         conn.commit()
-    # Promote ADMIN_EMAIL to admin if they already exist
     if settings.ADMIN_EMAIL:
         from app.models.user import User
-        db: Session = SessionLocal()
+        db = SessionLocal()
         try:
             u = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
             if u and (not u.is_active or not u.is_admin):
@@ -38,15 +36,15 @@ def _init_db_sync():
 
 
 async def _init_db():
-    for attempt in range(10):
+    for attempt in range(15):
         try:
             await asyncio.to_thread(_init_db_sync)
             logger.info("Database initialized successfully")
             return
         except Exception as exc:
-            logger.warning("DB init attempt %d/10 failed: %s", attempt + 1, exc)
-            await asyncio.sleep(5)
-    logger.error("Database initialization failed after 10 attempts")
+            logger.warning("DB init attempt %d/15 failed: %s", attempt + 1, exc)
+            await asyncio.sleep(4)
+    logger.error("Database initialization failed after 15 attempts")
 
 
 @asynccontextmanager
