@@ -1,18 +1,45 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from app.database import engine, Base
+from sqlalchemy.orm import Session
+from app.database import engine, Base, SessionLocal
 from app.config import settings
 from app.routers import auth, admin, products, inventory, forecast, orders, kpis, imports
 import app.models  # noqa — ensure all models are registered
+import time
+import logging
 
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger(__name__)
 
-# Lightweight migrations (idempotent ALTER TABLE)
-with engine.connect() as conn:
-    conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
-    conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
-    conn.commit()
+# Retry DB startup to handle cold starts (Neon/Render)
+for attempt in range(5):
+    try:
+        Base.metadata.create_all(bind=engine)
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
+            conn.commit()
+        break
+    except Exception as e:
+        logger.warning(f"DB startup attempt {attempt + 1}/5 failed: {e}")
+        if attempt < 4:
+            time.sleep(3)
+        else:
+            raise
+
+# Ensure ADMIN_EMAIL user is always active and admin
+if settings.ADMIN_EMAIL:
+    try:
+        from app.models.user import User
+        db: Session = SessionLocal()
+        admin_user = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
+        if admin_user and (not admin_user.is_active or not admin_user.is_admin):
+            admin_user.is_active = True
+            admin_user.is_admin = True
+            db.commit()
+        db.close()
+    except Exception as e:
+        logger.warning(f"Admin promotion check failed: {e}")
 
 app = FastAPI(
     title="MMX – Managing the Supply Chain",
