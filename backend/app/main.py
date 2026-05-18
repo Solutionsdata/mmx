@@ -15,10 +15,13 @@ logger = logging.getLogger(__name__)
 
 def _init_db_sync():
     """Run DB setup synchronously. Called in a background thread at startup."""
+    with engine.connect() as conn:
+        conn.execute(text("CREATE SCHEMA IF NOT EXISTS mmx"))
+        conn.commit()
     Base.metadata.create_all(bind=engine)
     with engine.connect() as conn:
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
-        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
+        conn.execute(text("ALTER TABLE mmx.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE mmx.users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
         conn.commit()
     # Promote ADMIN_EMAIL to admin if they already exist
     if settings.ADMIN_EMAIL:
