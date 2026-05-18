@@ -7,15 +7,9 @@ import toast from 'react-hot-toast'
 import {
   Package, Plus, Trash2, RefreshCw, Filter,
   ArrowDownToLine, ArrowUpFromLine, AlertTriangle,
-  ChevronDown, BarChart3,
 } from 'lucide-react'
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts'
 
 const EPR_AZUL = '#1A3A6B'
-const EPR_VERDE = '#1B7C3E'
-const EPR_AMARELO = '#F5A623'
 
 const TX_TYPES = [
   { value: 'IN', label: 'Entrada', icon: ArrowDownToLine, color: 'text-green-600' },

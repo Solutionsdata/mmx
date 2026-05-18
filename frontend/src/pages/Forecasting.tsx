@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { productsAPI, inventoryAPI, forecastAPI } from '../services/api'
+import { productsAPI, forecastAPI } from '../services/api'
 import type { Product, ForecastResult } from '../types'
 import toast from 'react-hot-toast'
 import {
-  TrendingUp, Play, RefreshCw, Info, ChevronDown,
+  TrendingUp, Play, RefreshCw,
 } from 'lucide-react'
 import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip,

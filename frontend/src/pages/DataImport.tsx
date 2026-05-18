@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { importAPI } from '../services/api'
 import toast from 'react-hot-toast'
 import {
-  Upload, FileSpreadsheet, CheckCircle, XCircle,
+  Upload, FileSpreadsheet, CheckCircle,
   AlertTriangle, Download, ChevronDown, ChevronUp,
 } from 'lucide-react'
 

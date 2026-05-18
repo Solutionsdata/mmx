@@ -7,8 +7,7 @@ import {
   ArrowUp, ArrowDown,
 } from 'lucide-react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend, Tooltip,
 } from 'recharts'
 
 const EPR_AZUL = '#1A3A6B'
