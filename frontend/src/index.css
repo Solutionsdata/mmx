@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── EPR Brand Colors ────────────────────────────────────────────────────────── */
+:root {
+  --epr-azul:          #1A3A6B;
+  --epr-azul-light:    #E8EDF6;
+  --epr-verde:         #1B7C3E;
+  --epr-verde-light:   #E8F5EE;
+  --epr-amarelo:       #F5A623;
+  --epr-amarelo-light: #FEF3DC;
+  --epr-cinza:         #F0F2F5;
+}
+
+@layer base {
+  html { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; height: 100%; }
+  body { @apply bg-gray-50 text-gray-900; height: 100%; overflow: hidden; }
+  #root { height: 100%; }
+  * { @apply antialiased; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--epr-azul);
+  }
+  .btn-primary:hover  { background-color: #0E2650; }
+  .btn-primary:active { background-color: #0a1e3e; }
+
+  .btn-green {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--epr-verde);
+  }
+  .btn-green:hover { background-color: #145C2E; }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 font-medium text-sm hover:bg-gray-50 active:bg-gray-100 transition-colors;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-red-600 text-white font-medium text-sm hover:bg-red-700 transition-colors;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-transparent transition bg-white;
+  }
+  .input:focus { box-shadow: 0 0 0 2px rgba(26,58,107,.25); border-color: var(--epr-azul); }
+
+  .card { @apply bg-white rounded-xl border border-gray-200; }
+  .page { @apply px-6 py-5 max-w-[1600px] mx-auto; }
+
+  .chart-card { @apply bg-white rounded-xl border border-gray-200 overflow-hidden; }
+  .chart-header { @apply flex items-center justify-between px-5 py-3.5 border-b border-gray-100; }
+  .chart-title { @apply text-sm font-semibold text-gray-800; }
+  .chart-sub { @apply text-xs text-gray-400 mt-0.5; }
+
+  .kpi-card {
+    @apply bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-2;
+  }
+  .kpi-value { @apply text-2xl font-bold; }
+  .kpi-label { @apply text-xs font-semibold text-gray-500 uppercase tracking-wider; }
+
+  .badge-ok       { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700; }
+  .badge-low      { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700; }
+  .badge-critical { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700; }
+  .badge-zero     { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-200 text-gray-600; }
+}
+
+/* ── Sticky first column ─────────────────────────────────────────────────────── */
+.table-sticky th:first-child,
+.table-sticky td:first-child {
+  position: sticky; left: 0; z-index: 10; background: inherit;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar         { width: 8px; height: 8px; }
+::-webkit-scrollbar-track   { background: #F0F2F5; border-radius: 99px; }
+::-webkit-scrollbar-thumb   { background: #94a3b8; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--epr-azul); }

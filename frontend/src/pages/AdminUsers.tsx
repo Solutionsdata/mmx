@@ -1,0 +1,330 @@
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { adminAPI } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import { Navigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import type { User } from '../types'
+import {
+  Crown, Shield, ShieldOff, UserCheck, UserX, Trash2,
+  RefreshCw, Clock, CheckCircle, XCircle,
+  CalendarDays, AlertTriangle, Infinity, KeyRound, Eye, EyeOff,
+} from 'lucide-react'
+
+function addMonths(months: number): string {
+  const d = new Date()
+  d.setMonth(d.getMonth() + months)
+  return d.toISOString()
+}
+
+function subStatus(date?: string | null): 'none' | 'valid' | 'expiring' | 'expired' {
+  if (!date) return 'none'
+  const d = new Date(date)
+  if (d < new Date()) return 'expired'
+  const days = Math.ceil((d.getTime() - Date.now()) / 86_400_000)
+  return days <= 30 ? 'expiring' : 'valid'
+}
+
+function subBadge(date?: string | null) {
+  const s = subStatus(date)
+  if (s === 'none') return { label: 'Sem vencimento', cls: 'bg-gray-100 text-gray-500' }
+  const d = new Date(date!)
+  const label = d.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+  if (s === 'expired') return { label: `Vencida em ${label}`, cls: 'bg-red-100 text-red-700' }
+  const days = Math.ceil((d.getTime() - Date.now()) / 86_400_000)
+  return {
+    label: days <= 30 ? `Vence em ${days}d (${label})` : `Válida até ${label}`,
+    cls: days <= 30 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700',
+  }
+}
+
+function MonthsInput({ userId, onSave, pending, currentDate }: { userId: number; onSave: (id: number, months: number | null) => void; pending: boolean; currentDate?: string | null }) {
+  const [months, setMonths] = useState(3)
+  const [open, setOpen] = useState(false)
+  const badge = subBadge(currentDate)
+  const status = subStatus(currentDate)
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${badge.cls}`}>
+        {status === 'expired' && <AlertTriangle size={11} />}
+        {badge.label}
+      </span>
+      {!open ? (
+        <button onClick={() => setOpen(true)} className={`text-xs font-medium hover:underline ${status === 'expired' ? 'text-red-600' : 'text-blue-600'}`}>
+          {status === 'expired' ? 'Renovar agora' : 'Alterar'}
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <input type="number" min={1} max={120} value={months} autoFocus onChange={(e) => setMonths(Number(e.target.value))} className="border border-gray-300 rounded px-2 py-0.5 text-xs w-16 text-center" />
+          <span className="text-xs text-gray-500">mes{months !== 1 ? 'es' : ''}</span>
+          <button onClick={() => { onSave(userId, months); setOpen(false) }} disabled={pending} className="text-xs px-2 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">OK</button>
+          <button onClick={() => { onSave(userId, null); setOpen(false) }} disabled={pending} className="text-xs px-2 py-0.5 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 flex items-center gap-0.5">
+            <Infinity size={11} /> Sem limite
+          </button>
+          <button onClick={() => setOpen(false)} className="text-xs px-2 py-0.5 bg-gray-200 text-gray-600 rounded">✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ApproveRow({ u, onConfirm, onReject, pending }: { u: User; onConfirm: (id: number, months: number | null) => void; onReject: (id: number) => void; pending: boolean }) {
+  const [months, setMonths] = useState(3)
+  const [noLimit, setNoLimit] = useState(false)
+  const [etapa, setEtapa] = useState<'idle' | 'choosing'>('idle')
+  if (etapa === 'idle') return (
+    <div className="flex items-center justify-end gap-2">
+      <button onClick={() => setEtapa('choosing')} disabled={pending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 disabled:opacity-50">
+        <CheckCircle size={13} /> Aprovar
+      </button>
+      <button onClick={() => onReject(u.id)} disabled={pending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-100 text-red-600 text-xs font-semibold hover:bg-red-200 disabled:opacity-50">
+        <XCircle size={13} /> Reprovar
+      </button>
+    </div>
+  )
+  return (
+    <div className="flex items-center justify-end gap-2 flex-wrap">
+      <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-1.5 flex-wrap">
+        <CalendarDays size={13} className="text-green-700" />
+        <span className="text-xs text-green-700 font-medium">Período:</span>
+        {noLimit ? (
+          <span className="text-xs text-green-700 font-medium flex items-center gap-1"><Infinity size={12} /> Sem vencimento</span>
+        ) : (
+          <>
+            <input type="number" min={1} max={120} value={months} autoFocus={!noLimit} onChange={(e) => setMonths(Math.max(1, Number(e.target.value)))} className="border border-green-300 rounded px-2 py-0.5 text-xs w-14 text-center" />
+            <span className="text-xs text-green-700">mes{months !== 1 ? 'es' : ''}</span>
+          </>
+        )}
+        <label className="flex items-center gap-1 text-xs text-green-700 cursor-pointer">
+          <input type="checkbox" checked={noLimit} onChange={(e) => setNoLimit(e.target.checked)} className="w-3 h-3" />
+          Sem limite
+        </label>
+      </div>
+      <button onClick={() => onConfirm(u.id, noLimit ? null : months)} disabled={pending} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 disabled:opacity-50">
+        <CheckCircle size={13} /> Confirmar
+      </button>
+      <button onClick={() => setEtapa('idle')} disabled={pending} className="px-2 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-xs hover:bg-gray-200">Cancelar</button>
+    </div>
+  )
+}
+
+export default function AdminUsers() {
+  const { user: me } = useAuth()
+  const qc = useQueryClient()
+  const [confirmDelete, setConfirmDelete] = useState<User | null>(null)
+  const [resetPwdUser, setResetPwdUser] = useState<User | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [showNewPwd, setShowNewPwd] = useState(false)
+
+  if (me && !me.is_admin) return <Navigate to="/" replace />
+
+  const isSuperAdmin = me?.email?.includes('solutionsdata') ?? false
+
+  const { data: rawUsers, isLoading } = useQuery<User[]>({
+    queryKey: ['admin-users'],
+    queryFn: () => adminAPI.listUsers().then(r => r.data),
+  })
+  const users: User[] = Array.isArray(rawUsers) ? rawUsers : []
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: object }) => adminAPI.updateUser(id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-users'] }); toast.success('Usuário atualizado') },
+    onError: (err: any) => toast.error(err.response?.data?.detail ?? 'Erro'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => adminAPI.deleteUser(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['admin-users'] }); toast.success('Usuário excluído'); setConfirmDelete(null) },
+    onError: (err: any) => toast.error(err.response?.data?.detail ?? 'Erro'),
+  })
+
+  const resetPwdMutation = useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) => adminAPI.resetPassword(id, password),
+    onSuccess: () => { toast.success('Senha redefinida!'); setResetPwdUser(null); setNewPassword('') },
+    onError: (err: any) => toast.error(err.response?.data?.detail ?? 'Erro'),
+  })
+
+  function confirmarAprovacao(userId: number, months: number | null) {
+    updateMutation.mutate({ id: userId, data: { is_active: true, assinatura_ate: months !== null ? addMonths(months) : null, clear_assinatura: months === null } })
+  }
+  function reprovar(userId: number) { deleteMutation.mutate(userId) }
+  function toggleAdmin(u: User) { updateMutation.mutate({ id: u.id, data: { is_admin: !u.is_admin } }) }
+  function toggleActive(u: User) { updateMutation.mutate({ id: u.id, data: { is_active: !u.is_active } }) }
+  function saveMonths(userId: number, months: number | null) {
+    updateMutation.mutate({ id: userId, data: months !== null ? { assinatura_ate: addMonths(months) } : { clear_assinatura: true } })
+  }
+
+  const pending = users.filter(u => !u.is_active)
+  const active = users.filter(u => u.is_active)
+  const cannotLogin = active.filter(u => !u.is_admin && u.assinatura_ate && new Date(u.assinatura_ate) < new Date())
+
+  if (isLoading) return <div className="flex items-center justify-center h-64 text-gray-400"><RefreshCw size={20} className="animate-spin mr-2" /> Carregando…</div>
+
+  return (
+    <div className="page overflow-y-auto h-full">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Crown size={24} className="text-amber-500" />
+          Gestão de Usuários
+        </h1>
+        <p className="text-gray-500 text-sm mt-1">Aprove cadastros, gerencie acessos e defina validade de assinatura.</p>
+      </div>
+
+      {cannotLogin.length > 0 && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertTriangle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-700">{cannotLogin.length} usuário{cannotLogin.length > 1 ? 's' : ''} com assinatura vencida</p>
+            <p className="text-xs text-red-500 mt-0.5">{cannotLogin.map(u => u.nome).join(', ')}</p>
+          </div>
+        </div>
+      )}
+
+      {pending.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-semibold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Clock size={15} /> Aguardando aprovação ({pending.length})
+          </h2>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-amber-100">
+                {pending.map(u => (
+                  <tr key={u.id} className="hover:bg-amber-100/50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center text-white text-xs font-bold">{u.nome.charAt(0).toUpperCase()}</div>
+                        <div>
+                          <p className="font-medium text-gray-900">{u.nome}</p>
+                          <p className="text-gray-400 text-xs">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{u.cargo ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{new Date(u.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
+                    <td className="px-4 py-3"><ApproveRow u={u} onConfirm={confirmarAprovacao} onReject={reprovar} pending={updateMutation.isPending || deleteMutation.isPending} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Usuários ativos ({active.length})</h2>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Usuário</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Cargo</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Assinatura</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Cadastro</th>
+                <th className="text-right px-4 py-3 font-semibold text-gray-600">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {active.map(u => {
+                const isMe = u.id === me?.id
+                const isTargetSuper = u.email?.includes('solutionsdata') ?? false
+                const canDelete = !isMe && !isTargetSuper && (!u.is_admin || isSuperAdmin)
+                const ss = subStatus(u.assinatura_ate)
+                const rowBg = (!u.is_admin && ss === 'expired') ? 'bg-red-50' : 'hover:bg-gray-50'
+                return (
+                  <tr key={u.id} className={`${rowBg} transition-colors`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${!u.is_admin && ss === 'expired' ? 'bg-red-400' : 'bg-blue-600'}`}>
+                          {u.nome.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900 flex items-center gap-1">
+                            {u.nome}
+                            {u.is_admin && <Crown size={12} className="text-amber-500" />}
+                            {isMe && <span className="text-xs text-gray-400 font-normal">(você)</span>}
+                          </p>
+                          <p className="text-gray-400 text-xs">{u.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{u.cargo ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      {u.is_admin ? (
+                        <span className="text-xs text-gray-400 italic flex items-center gap-1"><Infinity size={11} /> Admin — isento</span>
+                      ) : (
+                        <MonthsInput userId={u.id} onSave={saveMonths} pending={updateMutation.isPending} currentDate={u.assinatura_ate} />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{new Date(u.created_at).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button title="Redefinir senha" onClick={() => { setResetPwdUser(u); setNewPassword(''); setShowNewPwd(false) }} className="p-1.5 rounded-lg text-gray-400 hover:bg-yellow-50 hover:text-yellow-600 transition-colors">
+                          <KeyRound size={16} />
+                        </button>
+                        <button title={u.is_active ? 'Desativar' : 'Reativar'} onClick={() => toggleActive(u)} disabled={isMe || updateMutation.isPending} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40">
+                          {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                        </button>
+                        <button title={u.is_admin ? 'Remover admin' : 'Tornar admin'} onClick={() => toggleAdmin(u)} disabled={isMe || updateMutation.isPending} className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${u.is_admin ? 'text-amber-500 hover:bg-amber-50' : 'text-gray-400 hover:bg-amber-50 hover:text-amber-500'}`}>
+                          {u.is_admin ? <Shield size={16} /> : <ShieldOff size={16} />}
+                        </button>
+                        <button title="Excluir usuário" onClick={() => setConfirmDelete(u)} disabled={!canDelete || deleteMutation.isPending} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-40">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {active.length === 0 && <div className="text-center py-12 text-gray-400">Nenhum usuário ativo.</div>}
+        </div>
+      </div>
+
+      <div className="mt-4 flex gap-6 text-sm text-gray-400 flex-wrap">
+        <span>{users.length} usuário{users.length !== 1 ? 's' : ''} no total</span>
+        <span className="text-amber-600">{pending.length} pendente{pending.length !== 1 ? 's' : ''}</span>
+        <span className="text-green-600">{active.length} ativo{active.length !== 1 ? 's' : ''}</span>
+        {cannotLogin.length > 0 && <span className="text-red-600 font-medium">{cannotLogin.length} com assinatura vencida</span>}
+      </div>
+
+      {/* Reset password modal */}
+      {resetPwdUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <div className="flex items-center gap-2 mb-1"><KeyRound size={18} className="text-yellow-600" /><h3 className="text-lg font-bold">Redefinir Senha</h3></div>
+            <p className="text-sm text-gray-500 mb-4">Nova senha para <strong>{resetPwdUser.nome}</strong></p>
+            <div className="relative mb-4">
+              <input type={showNewPwd ? 'text' : 'password'} className="input pr-10 w-full" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoFocus minLength={6} />
+              <button type="button" onClick={() => setShowNewPwd(!showNewPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                {showNewPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setResetPwdUser(null); setNewPassword('') }} className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => resetPwdMutation.mutate({ id: resetPwdUser.id, password: newPassword })} disabled={newPassword.length < 6 || resetPwdMutation.isPending} className="flex-1 px-4 py-2 rounded-lg bg-yellow-500 text-white text-sm font-medium hover:bg-yellow-600 disabled:opacity-50">
+                {resetPwdMutation.isPending ? 'Salvando…' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Excluir usuário?</h3>
+            <p className="text-sm text-gray-500 mb-5"><strong>{confirmDelete.nome}</strong> será removido permanentemente.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium hover:bg-gray-50">Cancelar</button>
+              <button onClick={() => deleteMutation.mutate(confirmDelete.id)} disabled={deleteMutation.isPending} className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {deleteMutation.isPending ? 'Excluindo…' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
