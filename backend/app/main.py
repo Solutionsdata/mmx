@@ -1,45 +1,56 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import engine, Base, SessionLocal
 from app.config import settings
 from app.routers import auth, admin, products, inventory, forecast, orders, kpis, imports
-import app.models  # noqa — ensure all models are registered
-import time
+import app.models  # noqa — register all ORM models
+import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Retry DB startup to handle cold starts (Neon/Render)
-for attempt in range(5):
-    try:
-        Base.metadata.create_all(bind=engine)
-        with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
-            conn.commit()
-        break
-    except Exception as e:
-        logger.warning(f"DB startup attempt {attempt + 1}/5 failed: {e}")
-        if attempt < 4:
-            time.sleep(3)
-        else:
-            raise
 
-# Ensure ADMIN_EMAIL user is always active and admin
-if settings.ADMIN_EMAIL:
-    try:
+def _init_db_sync():
+    """Run DB setup synchronously. Called in a background thread at startup."""
+    Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS assinatura_ate TIMESTAMP"))
+        conn.commit()
+    # Promote ADMIN_EMAIL to admin if they already exist
+    if settings.ADMIN_EMAIL:
         from app.models.user import User
         db: Session = SessionLocal()
-        admin_user = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
-        if admin_user and (not admin_user.is_active or not admin_user.is_admin):
-            admin_user.is_active = True
-            admin_user.is_admin = True
-            db.commit()
-        db.close()
-    except Exception as e:
-        logger.warning(f"Admin promotion check failed: {e}")
+        try:
+            u = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
+            if u and (not u.is_active or not u.is_admin):
+                u.is_active = True
+                u.is_admin = True
+                db.commit()
+        finally:
+            db.close()
+
+
+async def _init_db():
+    for attempt in range(10):
+        try:
+            await asyncio.to_thread(_init_db_sync)
+            logger.info("Database initialized successfully")
+            return
+        except Exception as exc:
+            logger.warning("DB init attempt %d/10 failed: %s", attempt + 1, exc)
+            await asyncio.sleep(5)
+    logger.error("Database initialization failed after 10 attempts")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(_init_db())
+    yield
+
 
 app = FastAPI(
     title="MMX – Managing the Supply Chain",
@@ -47,6 +58,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    lifespan=lifespan,
 )
 
 _origins = list({
