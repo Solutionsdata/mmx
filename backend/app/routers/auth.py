@@ -33,15 +33,20 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(data: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="E-mail ou senha inválidos")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Conta inativa ou aguardando aprovação")
-    if not user.is_admin and user.assinatura_ate and user.assinatura_ate < datetime.utcnow():
-        raise HTTPException(status_code=402, detail="Assinatura vencida. Contate o administrador.")
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer", "user": UserOut.model_validate(user)}
+    try:
+        user = db.query(User).filter(User.email == data.email).first()
+        if not user or not verify_password(data.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="E-mail ou senha inválidos")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Conta inativa ou aguardando aprovação")
+        if not user.is_admin and user.assinatura_ate and user.assinatura_ate < datetime.utcnow():
+            raise HTTPException(status_code=402, detail="Assinatura vencida. Contate o administrador.")
+        token = create_access_token({"sub": str(user.id)})
+        return {"access_token": token, "token_type": "bearer", "user": UserOut.model_validate(user)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
 
 @router.get("/me", response_model=UserOut)
