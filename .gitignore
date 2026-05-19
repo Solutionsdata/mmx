@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Init / test scripts com credenciais (uso único, nunca commitar)
+init_*.py
+create_db.py
+test_*.py
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vercel/
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+uvicorn.log
