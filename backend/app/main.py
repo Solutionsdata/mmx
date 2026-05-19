@@ -82,15 +82,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    logger.error("Unhandled exception on %s: %s: %s", request.url.path, type(exc).__name__, exc)
-    return JSONResponse(
-        status_code=500,
-        content={"error": type(exc).__name__, "detail": str(exc)},
-    )
-
 _origins = list({
     "http://localhost:3000",
     "http://localhost:5173",
